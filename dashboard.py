@@ -90,7 +90,7 @@ DASHBOARD_TEMPLATE = """
 
     .kpis {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 12px;
       margin-bottom: 24px;
     }
@@ -171,6 +171,7 @@ DASHBOARD_TEMPLATE = """
     .risk-high { color: #ffd5d5; background: rgba(255, 106, 106, 0.16); border-color: rgba(255, 106, 106, 0.6); }
     .risk-medium { color: #ffe6c2; background: rgba(255, 177, 74, 0.16); border-color: rgba(255, 177, 74, 0.52); }
     .risk-low { color: #d9f9e3; background: rgba(109, 208, 139, 0.16); border-color: rgba(109, 208, 139, 0.45); }
+    .status-open { color: #b8fff0; background: rgba(68, 209, 180, 0.14); border-color: rgba(68, 209, 180, 0.45); }
 
     .meta {
       display: grid;
@@ -262,6 +263,10 @@ DASHBOARD_TEMPLATE = """
         <div class=\"value\">{{ high_risk_count }}</div>
       </article>
       <article class=\"kpi\">
+        <div class=\"label\">Medium Risk Findings</div>
+        <div class=\"value\">{{ medium_risk_count }}</div>
+      </article>
+      <article class=\"kpi\">
         <div class=\"label\">Open Ports Observed</div>
         <div class=\"value\">{{ open_ports_total }}</div>
       </article>
@@ -275,7 +280,12 @@ DASHBOARD_TEMPLATE = """
           <article class=\"scan\">
             <div class=\"scan-top\">
               <div class=\"target\">{{ scan.target }}</div>
-              <span class=\"badge {{ scan.risk_class }}\">{{ scan.risk_level }}</span>
+              <div>
+                <span class=\"badge {{ scan.risk_class }}\">{{ scan.risk_level }}</span>
+                {% if scan.has_open_ports %}
+                  <span class=\"badge status-open\">OPEN</span>
+                {% endif %}
+              </div>
             </div>
 
             <div class=\"meta\">
@@ -376,6 +386,7 @@ def home():
                 "risk_level": risk_level,
                 "risk_class": risk_class,
                 "open_ports": normalized_ports,
+                "has_open_ports": len(normalized_ports) > 0,
             }
         )
         total_open_ports += len(normalized_ports)
@@ -386,6 +397,7 @@ def home():
         total_scans=len(scans),
         unique_targets=len({scan["target"] for scan in scans}),
         high_risk_count=sum(1 for scan in scans if scan["risk_level"] == "HIGH"),
+        medium_risk_count=sum(1 for scan in scans if scan["risk_level"] == "MEDIUM"),
         open_ports_total=total_open_ports,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
