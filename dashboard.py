@@ -99,7 +99,7 @@ DASHBOARD_TEMPLATE = """
 
     .kpis {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 12px;
       margin-bottom: 24px;
     }
@@ -187,7 +187,7 @@ DASHBOARD_TEMPLATE = """
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 14px;
     }
 
@@ -226,6 +226,7 @@ DASHBOARD_TEMPLATE = """
     .risk-medium { color: #ffe6c2; background: rgba(255, 177, 74, 0.16); border-color: rgba(255, 177, 74, 0.52); }
     .risk-low { color: #d9f9e3; background: rgba(109, 208, 139, 0.16); border-color: rgba(109, 208, 139, 0.45); }
     .status-open { color: #b8fff0; background: rgba(68, 209, 180, 0.14); border-color: rgba(68, 209, 180, 0.45); }
+    .btn-copy { margin-left: 6px; }
 
     .meta {
       display: grid;
@@ -334,6 +335,7 @@ DASHBOARD_TEMPLATE = """
         <a href=\"{{ url_for('home', risk='HIGH') }}\" class=\"btn {% if active_filter == 'HIGH' %}active{% endif %}\">High Risk</a>
         <a href=\"{{ url_for('home', risk='MEDIUM') }}\" class=\"btn {% if active_filter == 'MEDIUM' %}active{% endif %}\">Medium Risk</a>
         <a href=\"{{ url_for('home', open_only='1') }}\" class=\"btn {% if active_filter == 'OPEN' %}active{% endif %}\">Open Ports</a>
+        <a href=\"{{ url_for('home', cve_only='1') }}\" class=\"btn {% if active_filter == 'CVE' %}active{% endif %}\">CVE</a>
       </div>
       <button type=\"button\" class=\"btn btn-danger\" onclick=\"deleteScans()\">Delete All Scans</button>
     </div>
@@ -355,6 +357,7 @@ DASHBOARD_TEMPLATE = """
                 {% if scan.has_open_ports %}
                   <span class=\"badge status-open\">OPEN</span>
                 {% endif %}
+                <button class=\"btn btn-copy\" onclick=\"copyScan({{ loop.index0 }})\">Copy</button>
               </div>
             </div>
 
@@ -373,10 +376,10 @@ DASHBOARD_TEMPLATE = """
               </div>
             </div>
 
-            {% if scan.open_ports %}
+{% if scan.open_ports %}
               <div class=\"ports\">
                 {% for port in scan.open_ports %}
-                  <span class=\"port\">{{ port.port }} | {{ port.banner }}</span>
+                  <span class=\"port\">{{ port.port }} | {{ port.banner }}{% if port.cve %} | CVE: {{ port.cve }}{% endif %}</span>
                 {% endfor %}
               </div>
             {% else %}
@@ -404,6 +407,28 @@ DASHBOARD_TEMPLATE = """
     } catch (err) {
       alert('Delete failed: ' + err);
     }
+  }
+
+  const SCANS = {{ scans | tojson }};
+
+  function copyScan(idx) {
+    const s = SCANS[idx];
+    if (!s) return;
+    const ports = (s.open_ports || []).map(p => {
+      const parts = [`port ${p.port}`, p.banner];
+      if (p.cve) parts.push(`CVE ${p.cve}`);
+      return parts.join(' | ');
+    });
+    const lines = [
+      `Target: ${s.target}`,
+      `Risk: ${s.risk_level} (${s.risk_score})`,
+      `Device: ${s.device_type}`,
+      `Timestamp: ${s.timestamp_display}`,
+      `Open Ports:`,
+      ...(ports.length ? ports : ['None'])
+    ];
+    const text = lines.join('\\n');
+    navigator.clipboard.writeText(text).catch(err => alert('Copy failed: ' + err));
   }
 </script>
 </html>
@@ -435,6 +460,7 @@ def _get_db_connection():
 def home():
     risk_filter = str(request.args.get("risk", "")).upper()
     open_only = request.args.get("open_only") == "1"
+    cve_only = request.args.get("cve_only") == "1"
     deleted_value = request.args.get("deleted")
     delete_notice = None
     if deleted_value is not None:
@@ -463,10 +489,12 @@ def home():
         normalized_ports = []
         for port in open_ports:
             if isinstance(port, dict):
+                cve = port.get("cve")
                 normalized_ports.append(
                     {
                         "port": port.get("port", "?"),
                         "banner": port.get("banner", "Unknown")[:50],
+                        "cve": cve if cve not in (None, "", "None") else None,
                     }
                 )
 
@@ -499,6 +527,9 @@ def home():
     elif open_only:
         filtered_scans = [scan for scan in scans if scan["has_open_ports"]]
         active_filter = "OPEN"
+    elif cve_only:
+        filtered_scans = [scan for scan in scans if any(p.get("cve") for p in scan["open_ports"])]
+        active_filter = "CVE"
 
     html = render_template_string(
         DASHBOARD_TEMPLATE,
