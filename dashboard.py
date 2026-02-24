@@ -2,11 +2,9 @@ from flask import Flask, render_template_string, request, redirect, url_for
 import sqlite3
 import json
 from datetime import datetime
-from pathlib import Path
+from database import DB_PATH, init_db, clear_scans
 
 app = Flask(__name__)
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "scan_history.db"
 
 DASHBOARD_TEMPLATE = """
 <!doctype html>
@@ -169,6 +167,15 @@ DASHBOARD_TEMPLATE = """
     .btn:hover { border-color: rgba(201, 221, 245, 0.45); }
     .btn.active { background: rgba(68, 209, 180, 0.18); border-color: rgba(68, 209, 180, 0.5); color: #bfffee; }
     .btn-danger { background: rgba(255, 106, 106, 0.14); border-color: rgba(255, 106, 106, 0.45); color: #ffdada; }
+    .notice {
+      margin-bottom: 12px;
+      border: 1px solid rgba(68, 209, 180, 0.4);
+      background: rgba(68, 209, 180, 0.12);
+      color: #c9fff2;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.85rem;
+    }
 
     .grid {
       display: grid;
@@ -319,10 +326,12 @@ DASHBOARD_TEMPLATE = """
         <a href=\"{{ url_for('home', risk='MEDIUM') }}\" class=\"btn {% if active_filter == 'MEDIUM' %}active{% endif %}\">Medium Risk</a>
         <a href=\"{{ url_for('home', open_only='1') }}\" class=\"btn {% if active_filter == 'OPEN' %}active{% endif %}\">Open Ports</a>
       </div>
-      <form action=\"{{ url_for('delete_scans') }}\" method=\"post\" onsubmit=\"return confirm('Delete all scan history? This cannot be undone.');\">
-        <button type=\"submit\" class=\"btn btn-danger\">Delete All Scans</button>
-      </form>
+      <a href=\"{{ url_for('delete_scans') }}\" class=\"btn btn-danger\" onclick=\"return confirm('Delete all scan history? This cannot be undone.');\">Delete All Scans</a>
     </div>
+
+    {% if delete_notice %}
+      <div class=\"notice\">{{ delete_notice }}</div>
+    {% endif %}
 
     <h2 class=\"section-title\">Recent Scan Results{% if active_filter != 'ALL' %} ({{ active_filter }}){% endif %}</h2>
 
@@ -401,9 +410,14 @@ def _get_db_connection():
 def home():
     risk_filter = str(request.args.get("risk", "")).upper()
     open_only = request.args.get("open_only") == "1"
+    deleted_value = request.args.get("deleted")
+    delete_notice = None
+    if deleted_value is not None:
+        delete_notice = f"Deleted {deleted_value} scan record(s)."
 
     rows = []
     try:
+        init_db()
         conn = _get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT target, result, timestamp FROM scans ORDER BY timestamp DESC")
@@ -468,6 +482,7 @@ def home():
         medium_risk_count=sum(1 for scan in scans if scan["risk_level"] == "MEDIUM"),
         open_ports_total=total_open_ports,
         active_filter=active_filter,
+        delete_notice=delete_notice,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
 
@@ -475,14 +490,10 @@ def home():
 @app.route("/delete-scans", methods=["POST", "GET"])
 def delete_scans():
     try:
-        conn = _get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM scans")
-        conn.commit()
-        conn.close()
+        before_count = clear_scans()
     except sqlite3.Error as exc:
         return f"Failed to delete scans: {exc}", 500
-    return redirect(url_for("home"))
+    return redirect(url_for("home", deleted=before_count))
 
 
 if __name__ == "__main__":
