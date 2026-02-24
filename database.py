@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "scan_history.db"
+CANDIDATE_DB_PATHS = {DB_PATH, Path.cwd() / "scan_history.db"}
 
 
 def get_connection():
@@ -88,14 +89,20 @@ def get_scan_count():
 
 
 def hard_reset_database():
-    # Reset to a fresh-clone state by removing the DB file; fall back to drop if locked.
-    try:
-        if DB_PATH.exists():
-            DB_PATH.unlink()
-    except PermissionError:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("DROP TABLE IF EXISTS scans")
-        conn.commit()
-        conn.close()
+    # Reset to a fresh-clone state by removing any known DB file; fall back to drop if locked.
+    removed = False
+    for path in CANDIDATE_DB_PATHS:
+        try:
+            if path.exists():
+                path.unlink()
+                removed = True
+        except PermissionError:
+            # If we cannot unlink (locked), drop table in that file instead.
+            conn = sqlite3.connect(str(path), timeout=10)
+            cursor = conn.cursor()
+            cursor.execute("DROP TABLE IF EXISTS scans")
+            conn.commit()
+            conn.close()
+            removed = True
     init_db()
+    return removed

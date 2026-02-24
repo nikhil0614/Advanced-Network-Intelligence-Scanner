@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, request, redirect, url_for, make_response
+from flask import Flask, render_template_string, request, redirect, url_for, make_response, jsonify
 import sqlite3
 import json
 from datetime import datetime
@@ -335,7 +335,7 @@ DASHBOARD_TEMPLATE = """
         <a href=\"{{ url_for('home', risk='MEDIUM') }}\" class=\"btn {% if active_filter == 'MEDIUM' %}active{% endif %}\">Medium Risk</a>
         <a href=\"{{ url_for('home', open_only='1') }}\" class=\"btn {% if active_filter == 'OPEN' %}active{% endif %}\">Open Ports</a>
       </div>
-      <a href=\"{{ url_for('delete_scans') }}\" class=\"btn btn-danger\" onclick=\"return confirm('Delete all scan history? This cannot be undone.');\">Delete All Scans</a>
+      <button type=\"button\" class=\"btn btn-danger\" onclick=\"deleteScans()\">Delete All Scans</button>
     </div>
 
     {% if delete_notice %}
@@ -390,6 +390,22 @@ DASHBOARD_TEMPLATE = """
     {% endif %}
   </main>
 </body>
+<script>
+  async function deleteScans() {
+    if (!confirm('Delete all scan history? This cannot be undone.')) return;
+    try {
+      const res = await fetch('{{ url_for("delete_scans") }}', { method: 'POST' });
+      if (!res.ok) {
+        const msg = await res.text();
+        alert('Delete failed: ' + msg);
+        return;
+      }
+      window.location = '{{ url_for("home") }}';
+    } catch (err) {
+      alert('Delete failed: ' + err);
+    }
+  }
+</script>
 </html>
 """
 
@@ -505,7 +521,7 @@ def home():
     return response
 
 
-@app.route("/delete-scans", methods=["POST", "GET"])
+@app.route("/delete-scans", methods=["POST"])
 def delete_scans():
     try:
         before_count = get_scan_count()
@@ -517,7 +533,7 @@ def delete_scans():
         return f"Failed to delete scans: {exc}", 500
     except PermissionError as exc:
         return f"Failed to reset database file: {exc}", 500
-    return redirect(url_for("home", deleted=before_count))
+    return jsonify({"deleted": before_count})
 
 
 if __name__ == "__main__":
