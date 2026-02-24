@@ -2,8 +2,11 @@ from flask import Flask, render_template_string, request, redirect, url_for
 import sqlite3
 import json
 from datetime import datetime
+from pathlib import Path
 
 app = Flask(__name__)
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "scan_history.db"
 
 DASHBOARD_TEMPLATE = """
 <!doctype html>
@@ -390,6 +393,10 @@ def _format_timestamp(value):
         return value or "N/A"
 
 
+def _get_db_connection():
+    return sqlite3.connect(str(DB_PATH), timeout=10)
+
+
 @app.route("/")
 def home():
     risk_filter = str(request.args.get("risk", "")).upper()
@@ -397,7 +404,7 @@ def home():
 
     rows = []
     try:
-        conn = sqlite3.connect("scan_history.db")
+        conn = _get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT target, result, timestamp FROM scans ORDER BY timestamp DESC")
         rows = cursor.fetchall()
@@ -465,16 +472,16 @@ def home():
     )
 
 
-@app.route("/delete-scans", methods=["POST"])
+@app.route("/delete-scans", methods=["POST", "GET"])
 def delete_scans():
     try:
-        conn = sqlite3.connect("scan_history.db")
+        conn = _get_db_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM scans")
         conn.commit()
         conn.close()
-    except sqlite3.Error:
-        pass
+    except sqlite3.Error as exc:
+        return f"Failed to delete scans: {exc}", 500
     return redirect(url_for("home"))
 
 
