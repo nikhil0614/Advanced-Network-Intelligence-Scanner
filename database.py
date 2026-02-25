@@ -6,15 +6,17 @@ import os
 import shutil
 
 BASE_DIR = Path(__file__).resolve().parent
-# Linux-first writable location; falls back to ~/.local/share if XDG_DATA_HOME set, else home/.local/share
-DATA_HOME = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-DB_DIR = DATA_HOME / "advanced_network_intelligence_scanner"
+# Keep DB inside project to align with sandbox and avoid permission clashes.
+DB_DIR = BASE_DIR / "data_user"
 DB_DIR.mkdir(parents=True, exist_ok=True)
 
 LEGACY_DB_ROOT = BASE_DIR / "scan_history.db"
 LEGACY_DB_DATA = BASE_DIR / "data" / "scan_history.db"
+LEGACY_DB_CWD = Path.cwd() / "scan_history.db"
+
+# mutable global that always points to the currently writable DB
 DB_PATH = DB_DIR / "scan_history.db"
-CANDIDATE_DB_PATHS = {DB_PATH, LEGACY_DB_ROOT, LEGACY_DB_DATA, Path.cwd() / "scan_history.db"}
+CANDIDATE_DB_PATHS = {DB_PATH, LEGACY_DB_ROOT, LEGACY_DB_DATA, LEGACY_DB_CWD}
 
 
 def ensure_db_writable(path: Path):
@@ -25,23 +27,47 @@ def ensure_db_writable(path: Path):
             pass
 
 
-def _migrate_legacy_db():
-    if DB_PATH.exists():
-        return
-    for legacy in (LEGACY_DB_DATA, LEGACY_DB_ROOT):
+def _choose_db_path():
+    global DB_PATH
+
+    preferred = DB_DIR / "scan_history.db"
+
+    def writable(p: Path) -> bool:
+        return p.exists() and os.access(p, os.W_OK)
+
+    # Try preferred path first
+    if preferred.exists():
+        ensure_db_writable(preferred)
+        if writable(preferred):
+            DB_PATH = preferred
+            return DB_PATH
+
+    # Try legacy locations (root/data/cwd)
+    for legacy in (LEGACY_DB_DATA, LEGACY_DB_ROOT, LEGACY_DB_CWD):
         if legacy.exists():
+            ensure_db_writable(legacy)
             try:
-                shutil.copy2(legacy, DB_PATH)
-                os.chmod(DB_PATH, 0o666)
-                return
+                DB_DIR.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(legacy, preferred)
+                os.chmod(preferred, 0o666)
+                DB_PATH = preferred
+                return DB_PATH
             except Exception:
-                pass
+                # If copy fails, but legacy is writable, use it directly
+                if writable(legacy):
+                    DB_PATH = legacy
+                    return DB_PATH
+
+    # If preferred not present, create new
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    DB_PATH = preferred
+    return DB_PATH
 
 
 def get_connection():
-    _migrate_legacy_db()
-    ensure_db_writable(DB_PATH)
-    return sqlite3.connect(str(DB_PATH), timeout=10)
+    path = _choose_db_path()
+    ensure_db_writable(path)
+    return sqlite3.connect(str(path), timeout=10)
 
 def init_db():
     conn = get_connection()
