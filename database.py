@@ -2,12 +2,22 @@ import sqlite3
 import json
 from datetime import datetime
 from pathlib import Path
+import os
 
 DB_PATH = Path(__file__).resolve().parent / "scan_history.db"
 CANDIDATE_DB_PATHS = {DB_PATH, Path.cwd() / "scan_history.db"}
 
 
+def ensure_db_writable(path: Path):
+    if path.exists():
+        try:
+            os.chmod(path, 0o666)
+        except Exception:
+            pass
+
+
 def get_connection():
+    ensure_db_writable(DB_PATH)
     return sqlite3.connect(str(DB_PATH), timeout=10)
 
 def init_db():
@@ -92,6 +102,7 @@ def hard_reset_database():
     # Reset to a fresh-clone state by removing any known DB file; fall back to drop if locked.
     removed = False
     for path in CANDIDATE_DB_PATHS:
+        ensure_db_writable(path)
         try:
             if path.exists():
                 path.unlink()
