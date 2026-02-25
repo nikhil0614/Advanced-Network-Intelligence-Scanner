@@ -11,6 +11,11 @@ from report_generator import generate_json_report, generate_html_report
 from database import init_db, save_scan
 
 def main():
+    print("\n=== Intelligent Network Scanner ===")
+    print("Auto scan local network : sudo python main.py --auto")
+    print("Scan specific target    : python main.py -t <ip> [-p ports]")
+    print("Made by: Vytla Nikhil\n")
+
     parser = argparse.ArgumentParser(description="Advanced Network Intelligence Scanner")
     parser.add_argument("-t", "--target", help="Target IP")
     parser.add_argument("-p", "--ports", default="1-1024", help="Port range")

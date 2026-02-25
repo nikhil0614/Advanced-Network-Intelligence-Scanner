@@ -26,7 +26,7 @@ Advanced-Network-Intelligence-Scanner/
 +-- database.py             # SQLite helpers
 +-- dashboard.py            # Flask UI
 +-- templates/
-�   +-- dashboard.html      # (legacy template, current UI in dashboard.py)
+    +-- dashboard.html      # (legacy template, current UI in dashboard.py)
 +-- requirements.txt
 +-- reports/
     +-- json/               # generated JSON reports
@@ -72,10 +72,11 @@ Features: KPI cards, filters (High/Medium/Open Ports/CVE), copy card info, delet
 - Telnet (23): +5
 - RDP (3389): +4
 - SMB (445): +4
-Levels: 0�4 Low, 5�9 Medium, 10+ High.
+Levels: 0-4 Low, 5-9 Medium, 10+ High.
 
 ## Ethical Use
 For educational labs and authorized assessments only. Unauthorized scanning is illegal.
 
 ## Author
-Cybersecurity and Ethical Hacking Club - KL SAC
+Vytla Nikhil
+2300030738cseird@gmail.com
