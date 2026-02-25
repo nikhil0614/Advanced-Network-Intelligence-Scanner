@@ -3,9 +3,15 @@ import json
 from datetime import datetime
 from pathlib import Path
 import os
+import shutil
 
-DB_PATH = Path(__file__).resolve().parent / "scan_history.db"
-CANDIDATE_DB_PATHS = {DB_PATH, Path.cwd() / "scan_history.db"}
+BASE_DIR = Path(__file__).resolve().parent
+DB_DIR = BASE_DIR / "data"
+DB_DIR.mkdir(exist_ok=True)
+
+LEGACY_DB = BASE_DIR / "scan_history.db"
+DB_PATH = DB_DIR / "scan_history.db"
+CANDIDATE_DB_PATHS = {DB_PATH, LEGACY_DB, Path.cwd() / "scan_history.db"}
 
 
 def ensure_db_writable(path: Path):
@@ -16,7 +22,17 @@ def ensure_db_writable(path: Path):
             pass
 
 
+def _migrate_legacy_db():
+    if LEGACY_DB.exists() and not DB_PATH.exists():
+        try:
+            shutil.copy2(LEGACY_DB, DB_PATH)
+            os.chmod(DB_PATH, 0o666)
+        except Exception:
+            pass
+
+
 def get_connection():
+    _migrate_legacy_db()
     ensure_db_writable(DB_PATH)
     return sqlite3.connect(str(DB_PATH), timeout=10)
 
